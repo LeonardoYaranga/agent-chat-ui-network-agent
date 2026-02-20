@@ -45,6 +45,12 @@ import {
   ArtifactTitle,
   useArtifactContext,
 } from "./artifact";
+import { UserMenu } from "../auth/UserMenu";
+import { ModelSelector } from "../ModelSelector";
+import { MCPSelector } from "../MCPSelector";
+import { useModel } from "@/hooks/useModel";
+import { useMCP } from "@/hooks/useMCP";
+import { ALL_MODELS } from "@/lib/models";
 
 function StickyToBottomContent(props: {
   content: ReactNode;
@@ -142,6 +148,12 @@ export function Thread() {
   const messages = stream.messages;
   const isLoading = stream.isLoading;
 
+  // Model selection
+  const { selectedModel, setModel } = useModel();
+
+  // MCP selection
+  const { mcpSelection } = useMCP();
+
   const lastError = useRef<string | undefined>(undefined);
 
   const setThreadId = (id: string | null) => {
@@ -220,6 +232,15 @@ export function Thread() {
         streamMode: ["values"],
         streamSubgraphs: true,
         streamResumable: true,
+        config: {
+          configurable: {
+            llmConfig: {
+              provider: selectedModel.provider,
+              model: selectedModel.model,
+            },
+            mcpSelection: mcpSelection,
+          },
+        },
         optimisticValues: (prev) => ({
           ...prev,
           context,
@@ -374,6 +395,7 @@ export function Thread() {
                 <div className="flex items-center">
                   <OpenGitHubRepo />
                 </div>
+                <UserMenu />
                 <TooltipIconButton
                   size="lg"
                   className="p-4"
@@ -484,7 +506,28 @@ export function Thread() {
                       />
 
                       <div className="flex items-center gap-6 p-2 pt-4">
-                        <div>
+                        <div className="flex items-center gap-4">
+                          <ModelSelector
+                            selectedModel={selectedModel}
+                            onModelChange={(config) => {
+                              const model = ALL_MODELS.find(
+                                (m) =>
+                                  m.model === config.model &&
+                                  m.provider === config.provider,
+                              );
+                              if (model) {
+                                setModel(config, model);
+                                toast.success(
+                                  `Modelo cambiado a ${model.name}`,
+                                  {
+                                    description: `Provider: ${config.provider}`,
+                                    duration: 3000,
+                                  },
+                                );
+                              }
+                            }}
+                          />
+                          <MCPSelector />
                           <div className="flex items-center space-x-2">
                             <Switch
                               id="render-tool-calls"

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useThreads } from "@/providers/Thread";
 import { Thread } from "@langchain/langgraph-sdk";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { getContentString } from "../utils";
 import { useQueryState, parseAsBoolean } from "nuqs";
@@ -12,40 +12,120 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PanelRightOpen, PanelRightClose } from "lucide-react";
+import { PanelRightOpen, PanelRightClose, Trash2 } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+
+/**
+ * @description Extrae el título del thread basándose en el primer mensaje
+ * @param thread - El thread de LangGraph
+ * @returns Título del thread o el thread_id si no hay mensajes
+ */
+function getThreadTitle(thread: Thread): string {
+  if (
+    typeof thread.values === "object" &&
+    thread.values &&
+    "messages" in thread.values &&
+    Array.isArray(thread.values.messages) &&
+    thread.values.messages?.length > 0
+  ) {
+    // Obtener el primer mensaje del usuario (si existe)
+    const userMessages = thread.values.messages.filter(
+      (msg: any) => msg.type === "human" || msg.role === "user",
+    );
+
+    if (userMessages.length > 0) {
+      const firstUserMessage = getContentString(userMessages[0].content);
+      // Limitar a 50 caracteres y agregar puntos suspensivos si es muy largo
+      return firstUserMessage.length > 50
+        ? firstUserMessage.substring(0, 50) + "..."
+        : firstUserMessage;
+    }
+  }
+  return thread.thread_id.substring(0, 12) + "...";
+}
+
+/**
+ * @description Obtiene la fecha del último mensaje del thread
+ * @param thread - El thread de LangGraph
+ * @returns Fecha formateada o "N/A"
+ */
+function getThreadDate(thread: Thread): string {
+  // Usar updated_at si existe, sino created_at
+  const dateString = (thread as any).updated_at || (thread as any).created_at;
+
+  if (dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("es-ES", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return "None";
+}
 
 function ThreadList({
   threads,
   onThreadClick,
+  onDeleteThread,
 }: {
   threads: Thread[];
   onThreadClick?: (threadId: string) => void;
+  onDeleteThread?: (threadId: string) => Promise<void>;
 }) {
   const [threadId, setThreadId] = useQueryState("threadId");
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
+
+  const handleDelete = async (
+    e: React.MouseEvent,
+    threadIdToDelete: string,
+  ) => {
+    e.stopPropagation();
+
+    if (
+      !confirm(
+        "¿Estás seguro que deseas eliminar este chat? Se borrarán todos los mensajes.",
+      )
+    ) {
+      return;
+    }
+
+    setDeletingThreadId(threadIdToDelete);
+    try {
+      await onDeleteThread?.(threadIdToDelete);
+      // Si estábamos viendo este thread, limpiar la selección
+      if (threadId === threadIdToDelete) {
+        setThreadId(null);
+      }
+    } catch (error) {
+      console.error("Error deleting thread:", error);
+      alert("Error al eliminar el chat");
+    } finally {
+      setDeletingThreadId(null);
+    }
+  };
 
   return (
     <div className="flex h-full w-full flex-col items-start justify-start gap-2 overflow-y-scroll [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
       {threads.map((t) => {
-        let itemText = t.thread_id;
-        if (
-          typeof t.values === "object" &&
-          t.values &&
-          "messages" in t.values &&
-          Array.isArray(t.values.messages) &&
-          t.values.messages?.length > 0
-        ) {
-          const firstMessage = t.values.messages[0];
-          itemText = getContentString(firstMessage.content);
-        }
+        const title = getThreadTitle(t);
+        const date = getThreadDate(t);
+        const isSelected = threadId === t.thread_id;
+        const isDeleting = deletingThreadId === t.thread_id;
+
         return (
           <div
             key={t.thread_id}
-            className="w-full px-1"
+            className={`group relative w-full rounded-lg px-2 py-1 transition-all ${
+              isSelected ? "bg-blue-100" : "hover:bg-gray-100"
+            }`}
           >
             <Button
               variant="ghost"
-              className="w-[280px] items-start justify-start text-left font-normal"
+              className="w-full items-start justify-start text-left font-normal disabled:opacity-50"
+              disabled={isDeleting}
               onClick={(e) => {
                 e.preventDefault();
                 onThreadClick?.(t.thread_id);
@@ -53,7 +133,23 @@ function ThreadList({
                 setThreadId(t.thread_id);
               }}
             >
-              <p className="truncate text-ellipsis">{itemText}</p>
+              <div className="flex flex-1 flex-col gap-1 overflow-hidden">
+                <p className="truncate text-sm font-medium text-ellipsis">
+                  {title}
+                </p>
+                <p className="text-xs text-gray-500">{date}</p>
+              </div>
+            </Button>
+
+            {/* Botón de eliminar - visible al hover */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100"
+              onClick={(e) => handleDelete(e, t.thread_id)}
+              disabled={isDeleting}
+            >
+              <Trash2 className="size-4 text-red-500" />
             </Button>
           </div>
         );
@@ -82,17 +178,44 @@ export default function ThreadHistory() {
     parseAsBoolean.withDefault(false),
   );
 
-  const { getThreads, threads, setThreads, threadsLoading, setThreadsLoading } =
-    useThreads();
+  const {
+    getThreads,
+    threads,
+    setThreads,
+    threadsLoading,
+    setThreadsLoading,
+    deleteThread,
+  } = useThreads();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setThreadsLoading(true);
     getThreads()
-      .then(setThreads)
-      .catch(console.error)
-      .finally(() => setThreadsLoading(false));
+      .then((threads) => {
+        setThreads(threads);
+      })
+      .catch((error) => {
+        console.error("Error cargando threads:", error);
+      })
+      .finally(() => {
+        setThreadsLoading(false);
+      });
   }, []);
+
+  /**
+   * @description Maneja la eliminación de un thread
+   * @param threadId - ID del thread a eliminar
+   */
+  const handleDeleteThread = async (threadId: string) => {
+    try {
+      await deleteThread(threadId);
+      // Actualizar la lista de threads removiendo el eliminado
+      setThreads(threads.filter((t) => t.thread_id !== threadId));
+    } catch (error) {
+      console.error("Error deleting thread:", error);
+      throw error;
+    }
+  };
 
   return (
     <>
@@ -109,14 +232,15 @@ export default function ThreadHistory() {
               <PanelRightClose className="size-5" />
             )}
           </Button>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Thread History
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">Chats</h1>
         </div>
         {threadsLoading ? (
           <ThreadHistoryLoading />
         ) : (
-          <ThreadList threads={threads} />
+          <ThreadList
+            threads={threads}
+            onDeleteThread={handleDeleteThread}
+          />
         )}
       </div>
       <div className="lg:hidden">
@@ -132,11 +256,12 @@ export default function ThreadHistory() {
             className="flex lg:hidden"
           >
             <SheetHeader>
-              <SheetTitle>Thread History</SheetTitle>
+              <SheetTitle>Chats</SheetTitle>
             </SheetHeader>
             <ThreadList
               threads={threads}
               onThreadClick={() => setChatHistoryOpen((o) => !o)}
+              onDeleteThread={handleDeleteThread}
             />
           </SheetContent>
         </Sheet>

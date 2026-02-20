@@ -22,8 +22,6 @@ import { Label } from "@/components/ui/label";
 import { ArrowRight } from "lucide-react";
 import { PasswordInput } from "@/components/ui/password-input";
 import { getApiKey } from "@/lib/api-key";
-import { useThreads } from "./Thread";
-import { toast } from "sonner";
 
 export type StateType = { messages: Message[]; ui?: UIMessage[] };
 
@@ -66,6 +64,9 @@ async function checkGraphStatus(
   }
 }
 
+/**
+ * Componente interno que provee el stream context
+ */
 const StreamSession = ({
   children,
   apiKey,
@@ -78,7 +79,7 @@ const StreamSession = ({
   assistantId: string;
 }) => {
   const [threadId, setThreadId] = useQueryState("threadId");
-  const { getThreads, setThreads } = useThreads();
+
   const streamValue = useTypedStream({
     apiUrl,
     apiKey: apiKey ?? undefined,
@@ -95,26 +96,13 @@ const StreamSession = ({
     },
     onThreadId: (id) => {
       setThreadId(id);
-      // Refetch threads list when thread ID changes.
-      // Wait for some seconds before fetching so we're able to get the new thread that was created.
-      sleep().then(() => getThreads().then(setThreads).catch(console.error));
     },
   });
 
   useEffect(() => {
     checkGraphStatus(apiUrl, apiKey).then((ok) => {
       if (!ok) {
-        toast.error("Failed to connect to LangGraph server", {
-          description: () => (
-            <p>
-              Please ensure your graph is running at <code>{apiUrl}</code> and
-              your API key is correctly set (if connecting to a deployed graph).
-            </p>
-          ),
-          duration: 10000,
-          richColors: true,
-          closeButton: true,
-        });
+        console.error("Failed to connect to LangGraph server at", apiUrl);
       }
     });
   }, [apiKey, apiUrl]);
@@ -265,9 +253,9 @@ export const StreamProvider: React.FC<{ children: ReactNode }> = ({
 
   return (
     <StreamSession
-      apiKey={apiKey}
-      apiUrl={apiUrl}
-      assistantId={assistantId}
+      apiKey={apiKey || null}
+      apiUrl={finalApiUrl}
+      assistantId={finalAssistantId}
     >
       {children}
     </StreamSession>

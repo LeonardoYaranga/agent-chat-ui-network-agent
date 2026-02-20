@@ -19,6 +19,7 @@ interface ThreadContextType {
   setThreads: Dispatch<SetStateAction<Thread[]>>;
   threadsLoading: boolean;
   setThreadsLoading: Dispatch<SetStateAction<boolean>>;
+  deleteThread: (threadId: string) => Promise<void>;
 }
 
 const ThreadContext = createContext<ThreadContextType | undefined>(undefined);
@@ -34,8 +35,17 @@ function getThreadSearchMetadata(
 }
 
 export function ThreadProvider({ children }: { children: ReactNode }) {
-  const [apiUrl] = useQueryState("apiUrl");
-  const [assistantId] = useQueryState("assistantId");
+  // Cargar del .env via proceso de Next.js
+  const envApiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+  const envAssistantId = process.env.NEXT_PUBLIC_ASSISTANT_ID || "";
+
+  const [apiUrl] = useQueryState("apiUrl", {
+    defaultValue: envApiUrl,
+  });
+  const [assistantId] = useQueryState("assistantId", {
+    defaultValue: envAssistantId,
+  });
+
   const [threads, setThreads] = useState<Thread[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
 
@@ -43,15 +53,28 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     if (!apiUrl || !assistantId) return [];
     const client = createClient(apiUrl, getApiKey() ?? undefined);
 
-    const threads = await client.threads.search({
+    const result = await client.threads.search({
       metadata: {
         ...getThreadSearchMetadata(assistantId),
       },
       limit: 100,
     });
 
-    return threads;
+    const threads = Array.isArray(result)
+      ? result
+      : (result && (result as any).threads) || [];
+
+    return threads as Thread[];
   }, [apiUrl, assistantId]);
+
+  const deleteThread = useCallback(
+    async (threadId: string) => {
+      if (!apiUrl) return;
+      const client = createClient(apiUrl, getApiKey() ?? undefined);
+      await client.threads.delete(threadId);
+    },
+    [apiUrl],
+  );
 
   const value = {
     getThreads,
@@ -59,6 +82,7 @@ export function ThreadProvider({ children }: { children: ReactNode }) {
     setThreads,
     threadsLoading,
     setThreadsLoading,
+    deleteThread,
   };
 
   return (

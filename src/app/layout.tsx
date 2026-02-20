@@ -3,6 +3,9 @@ import "./globals.css";
 import { Inter } from "next/font/google";
 import React from "react";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
+import { AuthProvider } from "@/providers/Auth";
+import { ModelProvider } from "@/contexts/ModelContext";
+import { MCPProvider } from "@/contexts/MCPContext";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -23,7 +26,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <NuqsAdapter>{children}</NuqsAdapter>
+        <AuthProvider>
+          <ModelProvider>
+            <MCPProvider>
+              <NuqsAdapter>{children}</NuqsAdapter>
+            </MCPProvider>
+          </ModelProvider>
+        </AuthProvider>
       </body>
     </html>
   );
