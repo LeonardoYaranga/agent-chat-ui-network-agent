@@ -177,7 +177,7 @@ export function Writer(props: {
       </div>
 
       <Artifact title={props.title}>
-        <p className="p-4 whitespace-pre-wrap">{props.content}</p>
+        <p className="whitespace-pre-wrap p-4">{props.content}</p>
       </Artifact>
     </>
   );
@@ -240,3 +240,170 @@ const streamValue = useTypedStream({
   },
 });
 ```
+
+---
+
+## 🚀 Mejoras y Características Adicionales
+
+Este repositorio es un **fork mejorado** del [Agent Chat UI oficial de LangChain](https://github.com/langchain-ai/agent-chat-ui), con funcionalidades extendidas para proyectos de automatización de redes y casos de uso avanzados.
+
+### 📌 Consideraciones Importantes sobre Configuración Estática
+
+#### 🔧 MCP Selector - Herramientas Estáticas
+
+El componente `MCPSelector` tiene las herramientas MCP **configuradas de forma estática** en el código del frontend. Actualmente **no se obtienen dinámicamente del backend** porque:
+
+- ❌ La API de LangGraph no proporciona un endpoint estándar para listar herramientas MCP disponibles
+- ❌ Crear endpoints personalizados requeriría modificar significativamente el servidor LangGraph
+- ⚠️ **IMPORTANTE**: Si agregas o modificas herramientas MCP en el backend, **debes actualizar manualmente** el archivo [`MCPSelector.tsx`](src/components/MCPSelector.tsx)
+
+**Ubicación de configuración**:
+
+```typescript
+// Frontend: src/components/MCPSelector.tsx
+const MCP_SERVERS = {
+  github: {
+    label: "gitHub",
+    tools: ["create_branch", "create_or_update_file", ...],
+  },
+  networkAutomation: {
+    label: "Network Automation",
+    tools: ["generate_router_cisco_config"],
+  },
+  // ... otros servidores
+};
+```
+
+#### 🤖 Selector de Modelos - Sincronización Frontend/Backend
+
+Los modelos LLM disponibles están definidos en **dos archivos que deben mantenerse sincronizados**:
+
+- 📁 **Frontend**: [`src/lib/models.ts`](src/lib/models.ts)
+- 📁 **Backend**: `mcp_client_langchain_network_agent/src/config/models.ts`
+
+**⚠️ CRÍTICO**: Cuando agregues o modifiques modelos:
+
+1. ✅ Actualiza **ambos archivos** manualmente
+2. ✅ Asegúrate que `id`, `provider` y `model` coincidan exactamente
+3. ✅ Verifica que la configuración sea consistente
+
+**Por qué no hay endpoint dinámico**:
+
+- ❌ LangGraph Server no soporta endpoints REST personalizados fácilmente
+- ❌ Requeriría un servidor Express adicional
+- ✅ La solución actual es simple y funciona sin complejidad adicional
+
+📚 **Lee más sobre esto**:
+
+- [IMPLEMENTACION_SELECTOR_MODELOS.md](IMPLEMENTACION_SELECTOR_MODELOS.md) - Explicación detallada de la implementación
+- [SINCRONIZACION_MODELOS_FRONTEND_BACKEND.md](SINCRONIZACION_MODELOS_FRONTEND_BACKEND.md) - Guía completa sobre sincronización
+
+### ✨ Funcionalidades Implementadas
+
+#### 🔐 Sistema de Autenticación
+
+Sistema completo de login con gestión de usuarios y sesiones.
+
+📚 **Documentación**: [AUTH_README.md](AUTH_README.md)
+
+#### 💬 Nombres Descriptivos para Chats
+
+Mejora en la identificación de threads/conversaciones. En lugar de mostrar solo IDs numéricos (ej: `thread_12345`), ahora los chats muestran nombres descriptivos basados en el contenido.
+
+📚 **Documentación**: [CAMBIOS_IMPLEMENTADOS-NombresChats.md](CAMBIOS_IMPLEMENTADOS-NombresChats.md)
+
+#### 🛠️ Fix: Reject con Feedback
+
+Corrección del comportamiento del botón "Reject" en interrupciones del agente. Ahora funciona correctamente permitiendo dar feedback al rechazar una acción sugerida.
+
+📚 **Documentación**: [IMPLEMENTACION_REJECT_CON_FEEDBACK.md](IMPLEMENTACION_REJECT_CON_FEEDBACK.md)
+
+#### 🎛️ Selector Dinámico de Modelos LLM
+
+Cambia entre diferentes modelos (OpenAI, OpenRouter, Gemini, LM Studio) sin reiniciar el servidor.
+
+**Características**:
+
+- ✅ Cambio de modelo en tiempo real
+- ✅ Soporte para múltiples proveedores
+- ✅ Persistencia de selección en `localStorage`
+- ✅ UI elegante con búsqueda y badges de capacidades
+
+#### 🔌 Selector de Servidores MCP
+
+Habilita/deshabilita servidores MCP y sus herramientas específicas desde la interfaz.
+
+**Características**:
+
+- ✅ Activación selectiva de servidores (GitHub, Network Automation, Net Command)
+- ✅ Control granular de herramientas por servidor
+- ✅ UI intuitiva con checkboxes y agrupación
+
+### 🎓 Guía de Mantenimiento
+
+#### Agregar un Nuevo Modelo LLM
+
+1. Edita `src/lib/models.ts` (frontend):
+
+```typescript
+export const OPENROUTER_MODELS: ModelInfo[] = [
+  {
+    id: "mi-nuevo-modelo",
+    name: "Mi Nuevo Modelo",
+    provider: "openrouter",
+    model: "company/model-name",
+    description: "Descripción del modelo",
+    capabilities: {
+      streaming: true,
+      tools: true,
+    },
+  },
+  // ... otros modelos
+];
+```
+
+2. Edita `mcp_client_langchain_network_agent/src/config/models.ts` (backend):
+
+```typescript
+export const OPENROUTER_MODELS: ModelInfo[] = [
+  {
+    id: "mi-nuevo-modelo",
+    model: "company/model-name",
+    provider: "openrouter",
+    config: {
+      maxTokens: 8000,
+      timeout: 300000,
+    },
+  },
+  // ... otros modelos
+];
+```
+
+⚠️ Asegúrate que `id`, `provider` y `model` **coincidan exactamente** en ambos archivos.
+
+#### Agregar una Nueva Herramienta MCP
+
+1. Implementa la herramienta en tu servidor MCP backend
+2. Actualiza `src/components/MCPSelector.tsx`:
+
+```typescript
+const MCP_SERVERS = {
+  miServidor: {
+    label: "Mi Servidor",
+    tools: ["mi_nueva_herramienta", "otra_herramienta"],
+  },
+  // ... otros servidores
+};
+```
+
+### 🔗 Enlaces Útiles
+
+- 🌐 **Repositorio Original**: [github.com/langchain-ai/agent-chat-ui](https://github.com/langchain-ai/agent-chat-ui)
+- 📖 **Documentación LangGraph**: [langchain-ai.github.io/langgraph](https://langchain-ai.github.io/langgraph/)
+- 🛠️ **LangGraph API Reference**: [langchain-ai.github.io/langgraph/reference/](https://langchain-ai.github.io/langgraph/reference/)
+
+---
+
+## 📄 Licencia
+
+Ver archivo [LICENSE](LICENSE) para más detalles.
